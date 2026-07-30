@@ -1,6 +1,3 @@
-# youtube_ids.py
-# Mapping of exercise names (matching seed.py) to YouTube Shorts IDs
-
 YOUTUBE_IDS = {
     "Pelvic Tilts": "Gy9k15DHOYE",
     "Hip Circles": "k8mb7KgVVTo",
@@ -17,8 +14,3 @@ YOUTUBE_IDS = {
     "Low Lunge": "aXdflKW7c6U",
     "Pancake Stretch": "pmUM7p8EQN8",
 }
-
-if __name__ == "__main__":
-    print("✅ YouTube IDs mapped successfully.")
-    for name, vid in YOUTUBE_IDS.items():
-        print(f"  {name}: {vid}")
