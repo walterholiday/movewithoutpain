@@ -25,7 +25,6 @@ def get_db():
     finally:
         db.close()
 
-# --- Root endpoint (fixes 404) ---
 @app.get("/")
 async def root():
     return {
@@ -34,7 +33,6 @@ async def root():
         "docs": "/docs"
     }
 
-# --- Pydantic models ---
 class ExerciseResponse(BaseModel):
     id: int
     category: str
@@ -58,8 +56,6 @@ class CoachRequest(BaseModel):
     user_message: str
     language: str = "en"
     context: Optional[str] = None
-
-# --- Endpoints ---
 
 @app.get("/today", response_model=TodayResponse)
 async def get_today(db: Session = Depends(get_db)):
