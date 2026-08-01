@@ -25,6 +25,20 @@ def get_db():
     finally:
         db.close()
 
+@app.on_event("startup")
+def auto_seed():
+    """Seed the exercises table on boot if it's empty, so no Railway Console step is needed."""
+    db = SessionLocal()
+    try:
+        if db.query(Exercise).count() == 0:
+            from seed import seed
+            seed()
+            print("✅ Auto-seeded empty exercises table on startup.")
+    except Exception as e:
+        print(f"⚠️ Auto-seed skipped: {e}")
+    finally:
+        db.close()
+
 @app.get("/")
 async def root():
     return {
@@ -90,6 +104,9 @@ async def ai_coach(request: CoachRequest, db: Session = Depends(get_db)):
     user_prompt = request.user_message
     if request.context:
         user_prompt = f"The user is asking about '{request.context}'. Question: {request.user_message}"
+
+    if deepseek is None:
+        raise HTTPException(status_code=503, detail="AI coach is not configured (DEEPSEEK_API_KEY is missing).")
 
     try:
         response = await deepseek.chat.completions.create(
