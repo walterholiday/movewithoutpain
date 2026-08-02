@@ -120,3 +120,30 @@ async def ai_coach(request: CoachRequest, db: Session = Depends(get_db)):
         return {"response": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+from fastapi.responses import HTMLResponse
+
+PRIVACY_HTML = """<!DOCTYPE html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Privacy Policy - Move Without Pain</title>
+<style>body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#2B2B2B;line-height:1.6}h1{color:#2A7D6D}h2{color:#1F5F53;margin-top:28px}</style></head>
+<body>
+<h1>Privacy Policy - Move Without Pain</h1>
+<p><i>Effective August 1, 2026</i></p>
+<p>Move Without Pain ("the app") is a bilingual mobility training app. We keep things simple: <b>the app has no user accounts and collects no personal information.</b></p>
+<h2>What stays on your device</h2>
+<p>Your practice history, streaks, language preference, and reminder settings are stored only on your device. They are never uploaded to our servers.</p>
+<h2>What is sent to our servers</h2>
+<p>The app fetches the daily exercise list and daily tip from our server. When you ask the AI coach a question, the text of your question is sent to our server and forwarded to an AI provider (DeepSeek) to generate a response. Questions are not linked to your identity, are not used for advertising, and are never sold.</p>
+<h2>Third-party content</h2>
+<p>Exercise demo videos are provided through YouTube, which may collect data according to Google's privacy policy when videos play.</p>
+<h2>Not medical advice</h2>
+<p>The app offers general mobility guidance and is not a substitute for professional medical advice. Consult a healthcare professional for injuries or medical conditions.</p>
+<h2>Contact</h2>
+<p>Questions? Email <a href='mailto:brigbrednich@gmail.com'>brigbrednich@gmail.com</a>.</p>
+<p><i>Politica de privacidad: la app no tiene cuentas de usuario y no recopila informacion personal. Tu historial de practica se guarda solo en tu dispositivo. Las preguntas al coach de IA se envian a nuestro servidor y a DeepSeek para generar la respuesta, sin vincularse a tu identidad ni venderse. Contacto: brigbrednich@gmail.com.</i></p>
+</body></html>"""
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy():
+    return PRIVACY_HTML
