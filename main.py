@@ -147,3 +147,12 @@ PRIVACY_HTML = """<!DOCTYPE html>
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy():
     return PRIVACY_HTML
+
+@app.get("/embed/{video_id}", response_class=HTMLResponse)
+async def embed_video(video_id: str):
+    if not all(c.isalnum() or c in "-_" for c in video_id) or len(video_id) > 20:
+        raise HTTPException(status_code=404, detail="Not found")
+    return f"""<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{{margin:0;background:#000;height:100%;overflow:hidden}}iframe{{border:0;width:100%;height:100%}}</style></head>
+<body><iframe src="https://www.youtube.com/embed/{video_id}?playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>"""
