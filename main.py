@@ -152,7 +152,15 @@ async def privacy():
 async def embed_video(video_id: str):
     if not all(c.isalnum() or c in "-_" for c in video_id) or len(video_id) > 20:
         raise HTTPException(status_code=404, detail="Not found")
-    return f"""<!DOCTYPE html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{{margin:0;background:#000;height:100%;overflow:hidden}}iframe{{border:0;width:100%;height:100%}}</style></head>
-<body><iframe src="https://www.youtube.com/embed/{video_id}?playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>"""
+    return """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;background:#000;height:100%;overflow:hidden}#p{width:100%;height:100%}#err{color:#fff;font-family:sans-serif;padding:12px;text-align:center}</style></head>
+<body><div id="p"></div><div id="err"></div>
+<script>
+var tag=document.createElement('script');tag.src='https://www.youtube.com/iframe_api';document.head.appendChild(tag);
+function onYouTubeIframeAPIReady(){
+  new YT.Player('p',{videoId:'VIDEO_ID',
+    playerVars:{playsinline:1,rel:0,origin:'https://movewithoutpain-production.up.railway.app'},
+    events:{onError:function(e){document.getElementById('err').textContent='Video error '+e.data;}}});
+}
+</script></body></html>""".replace("VIDEO_ID", video_id)
