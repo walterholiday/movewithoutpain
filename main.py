@@ -6,8 +6,9 @@ from typing import List, Optional
 from datetime import date, timedelta
 import os
 
-from models import SessionLocal, Exercise, DailyTip
+from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
+from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
 
 app = FastAPI()
 
@@ -27,13 +28,34 @@ def get_db():
 
 @app.on_event("startup")
 def auto_seed():
-    """Seed the exercises table on boot if it's empty, so no Railway Console step is needed."""
+    """Seed the exercises table on boot if it's empty, so no Railway Console step is needed.
+    Also auto-migrates the `paths` column (added 2026-08) and backfills it on existing rows."""
+    from sqlalchemy import inspect, text
+    # 1. Add the paths column if the live table predates it (dialect-agnostic check).
+    try:
+        inspector = inspect(engine)
+        columns = {c["name"] for c in inspector.get_columns("exercises")}
+        if "paths" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE exercises ADD COLUMN paths VARCHAR(120)"))
+            print("✅ Migrated: added exercises.paths column.")
+    except Exception as e:
+        print(f"⚠️ Paths column migration skipped: {e}")
+    # 2. Seed if empty; backfill paths on existing rows if missing.
     db = SessionLocal()
     try:
         if db.query(Exercise).count() == 0:
             from seed import seed
             seed()
             print("✅ Auto-seeded empty exercises table on startup.")
+        else:
+            backfilled = 0
+            for ex in db.query(Exercise).filter(Exercise.paths.is_(None)).all():
+                ex.paths = ",".join(EXERCISE_PATHS.get(ex.name_en, ["full"]))
+                backfilled += 1
+            if backfilled:
+                db.commit()
+                print(f"✅ Backfilled paths on {backfilled} existing exercises.")
     except Exception as e:
         print(f"⚠️ Auto-seed skipped: {e}")
     finally:
@@ -43,7 +65,7 @@ def auto_seed():
 async def root():
     return {
         "message": "Move Without Pain API is running 🧘",
-        "endpoints": ["/today", "/history", "/stats", "/ai/coach"],
+        "endpoints": ["/today", "/paths", "/history", "/stats", "/ai/coach"],
         "docs": "/docs"
     }
 
@@ -60,6 +82,7 @@ class ExerciseResponse(BaseModel):
     tips_en: Optional[str]
     tips_es: Optional[str]
     youtube_video_id: Optional[str]
+    paths: Optional[str]  # comma-separated path slugs, e.g. "full,mobility,morning"
 
 class TodayResponse(BaseModel):
     date: str
@@ -71,9 +94,33 @@ class CoachRequest(BaseModel):
     language: str = "en"
     context: Optional[str] = None
 
+@app.get("/paths")
+async def get_paths(db: Session = Depends(get_db)):
+    """List the 6 routine paths with bilingual metadata, premium flag, and exercise counts."""
+    exercises = db.query(Exercise).all()
+    counts = {slug: 0 for slug in PATH_SLUGS}
+    for ex in exercises:
+        for slug in (ex.paths or "full").split(","):
+            if slug in counts:
+                counts[slug] += 1
+    return {
+        "paths": [{**p, "exercise_count": counts.get(p["slug"], 0)} for p in sorted(PATHS, key=lambda p: p["order"])],
+        "subscription": {
+            "product_id": "com.brigbrednich.movewithoutpain.premium.monthly",
+            "price_usd": 19.99,
+            "period": "monthly",
+            "unlocks": sorted(p["slug"] for p in PATHS if p["premium"]),
+        },
+    }
+
 @app.get("/today", response_model=TodayResponse)
-async def get_today(db: Session = Depends(get_db)):
+async def get_today(path: Optional[str] = None, db: Session = Depends(get_db)):
+    """Daily routine. Optional ?path=slug filters to one routine path (default: full)."""
+    if path is not None and path not in PATH_SLUGS:
+        raise HTTPException(status_code=404, detail=f"Unknown path '{path}'. Valid: {sorted(PATH_SLUGS)}")
     exercises = db.query(Exercise).order_by(Exercise.category, Exercise.order).all()
+    if path and path != "full":
+        exercises = [ex for ex in exercises if path in (ex.paths or "").split(",")]
     tip_record = db.query(DailyTip).filter(DailyTip.tip_date == date.today()).first()
     tip = tip_record.content_en if tip_record else None
     return {

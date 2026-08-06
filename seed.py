@@ -1,5 +1,6 @@
 from models import SessionLocal, Exercise
 from youtube_ids import YOUTUBE_IDS
+from paths import EXERCISE_PATHS
 
 exercises_data = [
     {"category": "mobility", "order": 1, "name_en": "Pelvic Tilts", "name_es": "Anteversión/Retroversión", "description_en": "Lying down, tilt your pelvis forward and backward. Important: do NOT arch your lower back. The movement must originate from the hip.", "description_es": "Acostado, movilizar la cadera hacia atrás y hacia delante. Importante NO ARQUEAR la espalda. El movimiento debe nacer desde la cadera.", "reps_or_time_en": "15 reps", "reps_or_time_es": "15 repeticiones", "tips_en": "Keep your spine neutral.", "tips_es": "Mantén la espalda neutra."},
@@ -28,6 +29,7 @@ def seed():
                 data["youtube_video_id"] = YOUTUBE_IDS[name_en]
             else:
                 data["youtube_video_id"] = None
+            data["paths"] = ",".join(EXERCISE_PATHS.get(name_en, ["full"]))
             db.add(Exercise(**data))
         db.commit()
         print("✅ Database seeded with all exercises and YouTube IDs.")

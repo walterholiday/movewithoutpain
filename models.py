@@ -23,6 +23,8 @@ class Exercise(Base):
     
     youtube_video_id = Column(String(20), nullable=True)
     image_url = Column(String(255), nullable=True)
+    # Comma-separated routine path slugs, e.g. "full,mobility,morning"
+    paths = Column(String(120), nullable=True)
 
 class DailyTip(Base):
     __tablename__ = "daily_tips"
