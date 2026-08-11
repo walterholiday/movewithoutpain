@@ -25,6 +25,10 @@ class Exercise(Base):
     image_url = Column(String(255), nullable=True)
     # Comma-separated routine path slugs, e.g. "full,mobility,morning"
     paths = Column(String(120), nullable=True)
+    # Neuroscience layer (added 2026-08-10): hashtag-style tag + bilingual "why this works"
+    neuro_tag = Column(String(40), nullable=True)
+    neuro_why_en = Column(Text, nullable=True)
+    neuro_why_es = Column(Text, nullable=True)
 
 class DailyTip(Base):
     __tablename__ = "daily_tips"

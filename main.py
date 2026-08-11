@@ -9,6 +9,7 @@ import os
 from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
 from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
+from neuro import neuro_for
 
 app = FastAPI()
 
@@ -29,33 +30,48 @@ def get_db():
 @app.on_event("startup")
 def auto_seed():
     """Seed the exercises table on boot if it's empty, so no Railway Console step is needed.
-    Also auto-migrates the `paths` column (added 2026-08) and backfills it on existing rows."""
+    Also auto-migrates columns added after the original schema (`paths`, 2026-08-06;
+    the neuro layer, 2026-08-10) and backfills them on existing rows."""
     from sqlalchemy import inspect, text
-    # 1. Add the paths column if the live table predates it (dialect-agnostic check).
+    # 1. Add any columns the live table predates (dialect-agnostic check).
+    MIGRATIONS = [
+        ("paths", "VARCHAR(120)"),
+        ("neuro_tag", "VARCHAR(40)"),
+        ("neuro_why_en", "TEXT"),
+        ("neuro_why_es", "TEXT"),
+    ]
     try:
         inspector = inspect(engine)
         columns = {c["name"] for c in inspector.get_columns("exercises")}
-        if "paths" not in columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE exercises ADD COLUMN paths VARCHAR(120)"))
-            print("✅ Migrated: added exercises.paths column.")
+        for col_name, col_type in MIGRATIONS:
+            if col_name not in columns:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE exercises ADD COLUMN {col_name} {col_type}"))
+                print(f"✅ Migrated: added exercises.{col_name} column.")
     except Exception as e:
-        print(f"⚠️ Paths column migration skipped: {e}")
-    # 2. Seed if empty; backfill paths on existing rows if missing.
+        print(f"⚠️ Column migration skipped: {e}")
+    # 2. Seed if empty, then always backfill any rows missing paths or neuro fields.
     db = SessionLocal()
     try:
         if db.query(Exercise).count() == 0:
             from seed import seed
             seed()
             print("✅ Auto-seeded empty exercises table on startup.")
-        else:
-            backfilled = 0
-            for ex in db.query(Exercise).filter(Exercise.paths.is_(None)).all():
-                ex.paths = ",".join(EXERCISE_PATHS.get(ex.name_en, ["full"]))
-                backfilled += 1
-            if backfilled:
-                db.commit()
-                print(f"✅ Backfilled paths on {backfilled} existing exercises.")
+
+        paths_filled = 0
+        for ex in db.query(Exercise).filter(Exercise.paths.is_(None)).all():
+            ex.paths = ",".join(EXERCISE_PATHS.get(ex.name_en, ["full"]))
+            paths_filled += 1
+
+        neuro_filled = 0
+        for ex in db.query(Exercise).filter(Exercise.neuro_why_en.is_(None)).all():
+            tag, why_en, why_es = neuro_for(ex.name_en)
+            ex.neuro_tag, ex.neuro_why_en, ex.neuro_why_es = tag, why_en, why_es
+            neuro_filled += 1
+
+        if paths_filled or neuro_filled:
+            db.commit()
+            print(f"✅ Backfilled paths on {paths_filled} and neuro fields on {neuro_filled} exercises.")
     except Exception as e:
         print(f"⚠️ Auto-seed skipped: {e}")
     finally:
@@ -83,6 +99,9 @@ class ExerciseResponse(BaseModel):
     tips_es: Optional[str]
     youtube_video_id: Optional[str]
     paths: Optional[str]  # comma-separated path slugs, e.g. "full,mobility,morning"
+    neuro_tag: Optional[str] = None
+    neuro_why_en: Optional[str] = None
+    neuro_why_es: Optional[str] = None
 
 class TodayResponse(BaseModel):
     date: str
@@ -106,6 +125,10 @@ async def get_paths(db: Session = Depends(get_db)):
     return {
         "paths": [{**p, "exercise_count": counts.get(p["slug"], 0)} for p in sorted(PATHS, key=lambda p: p["order"])],
         "subscription": {
+            # v1.0 ships free: every path is unlocked and the client shows no lock badges
+            # or paywall. Flipping this to True in v1.1 (once real IAP is wired up and the
+            # Paid Applications Agreement is active) re-enables gating server-side.
+            "enabled": False,
             "product_id": "com.brigbrednich.movewithoutpain.premium.monthly",
             "price_usd": 19.99,
             "period": "monthly",
@@ -194,6 +217,44 @@ PRIVACY_HTML = """<!DOCTYPE html>
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy():
     return PRIVACY_HTML
+
+SUPPORT_HTML = """<!DOCTYPE html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Support - Move Without Pain</title>
+<style>body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#2B2B2B;line-height:1.6}h1{color:#2A7D6D}h2{color:#1F5F53;margin-top:28px;font-size:18px}a{color:#2A7D6D}.q{font-weight:600;margin-top:18px}hr{border:0;border-top:1px solid #E3E9E7;margin:34px 0}</style></head>
+<body>
+<h1>Support - Move Without Pain</h1>
+<p>Questions, bugs, or feedback? Email <a href='mailto:brigbrednich@gmail.com'>brigbrednich@gmail.com</a> and we'll get back to you.</p>
+
+<h2>Frequently asked questions</h2>
+<div class='q'>Do I need an account?</div>
+<p>No. There is no sign-up, no email, and no login. Open the app and start moving.</p>
+
+<div class='q'>Why do the videos open outside the app?</div>
+<p>Exercise demonstrations are hosted on YouTube and open in a Safari window so they play reliably on every device. Close the window to return to your routine.</p>
+
+<div class='q'>I can't hear the guided session.</div>
+<p>Guided sessions use your iPhone's built-in speech. Check that the silent/ringer switch on the side of your phone is not set to silent, and turn the volume up while a session is playing.</p>
+
+<div class='q'>How do I switch between English and Spanish?</div>
+<p>Tap the EN/ES button at the top of the screen. Everything changes, including the spoken narration.</p>
+
+<div class='q'>Is my practice history stored anywhere?</div>
+<p>Only on your device. Deleting the app deletes your history and streak.</p>
+
+<div class='q'>Is this medical advice?</div>
+<p>No. The app offers general mobility guidance and is not a substitute for professional medical advice. If you have an injury or a medical condition, speak with a healthcare professional first. Stop if something hurts.</p>
+
+<hr>
+<p><b>Soporte en español</b></p>
+<p>Para preguntas, errores o comentarios, escribe a <a href='mailto:brigbrednich@gmail.com'>brigbrednich@gmail.com</a>.</p>
+<p><b>No necesitas cuenta:</b> no hay registro ni inicio de sesion. <b>Los videos se abren en Safari</b> para reproducirse de forma confiable; cierra la ventana para volver. <b>Si no escuchas la sesion guiada,</b> revisa que el interruptor de silencio de tu iPhone no este activado y sube el volumen durante la sesion. <b>Para cambiar de idioma,</b> toca el boton EN/ES. <b>Tu historial</b> se guarda solo en tu dispositivo. <b>Esto no es consejo medico:</b> consulta a un profesional de la salud si tienes una lesion o condicion medica.</p>
+<p><a href='/privacy'>Privacy Policy / Politica de privacidad</a></p>
+</body></html>"""
+
+@app.get("/support", response_class=HTMLResponse)
+async def support():
+    return SUPPORT_HTML
 
 @app.get("/embed/{video_id}", response_class=HTMLResponse)
 async def embed_video(video_id: str):

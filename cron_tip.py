@@ -8,7 +8,16 @@ async def generate_tip():
     response = await deepseek.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[
-            {"role": "system", "content": "You are a mobility coach. Write a short, poetic, 1-sentence daily tip based on these 5 principles: breathe, feel, align, don't force, be consistent. Inspire the user to move without pain."},
+            {"role": "system", "content": (
+                "You are a mobility coach who understands the nervous system. Write a short, "
+                "poetic, 1-sentence daily tip grounded in these 5 principles: breathe, feel, "
+                "align, don't force, be consistent. Where it fits naturally, draw on how the "
+                "nervous system governs flexibility — that slow movement and long holds signal "
+                "safety and let muscles release, that a fast pull triggers a protective reflex, "
+                "that attention sharpens body awareness. Keep it plain and human, never clinical. "
+                "Never claim to treat, cure, or diagnose anything, and never name specific "
+                "neurotransmitters or make medical claims. Inspire the user to move without pain."
+            )},
             {"role": "user", "content": "Give me today's tip in both English and Spanish, formatted as: EN: ... ES: ..."}
         ],
         temperature=0.9,
