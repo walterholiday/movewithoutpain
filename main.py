@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -9,6 +9,14 @@ import os
 from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
 from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
+from entitlements import (
+    Caller,
+    caller,
+    subscription_block,
+    verify_webhook,
+    handle_webhook,
+    refresh as refresh_entitlement,
+)
 from neuro import neuro_for
 
 app = FastAPI()
@@ -114,7 +122,7 @@ class CoachRequest(BaseModel):
     context: Optional[str] = None
 
 @app.get("/paths")
-async def get_paths(db: Session = Depends(get_db)):
+async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
     """List the 6 routine paths with bilingual metadata, premium flag, and exercise counts."""
     exercises = db.query(Exercise).all()
     counts = {slug: 0 for slug in PATH_SLUGS}
@@ -123,24 +131,39 @@ async def get_paths(db: Session = Depends(get_db)):
             if slug in counts:
                 counts[slug] += 1
     return {
-        "paths": [{**p, "exercise_count": counts.get(p["slug"], 0)} for p in sorted(PATHS, key=lambda p: p["order"])],
+        "paths": [
+            {
+                **p,
+                "exercise_count": counts.get(p["slug"], 0),
+                # `unlocked` is what the client should render off. Legacy (v1.0)
+                # builds ignore it and stay fully unlocked; v1.1+ builds send
+                # X-MWP-Api: 2 and get honest values.
+                "unlocked": c.may_access(p["premium"]),
+            }
+            for p in sorted(PATHS, key=lambda p: p["order"])
+        ],
         "subscription": {
-            # v1.0 ships free: every path is unlocked and the client shows no lock badges
-            # or paywall. Flipping this to True in v1.1 (once real IAP is wired up and the
-            # Paid Applications Agreement is active) re-enables gating server-side.
-            "enabled": False,
-            "product_id": "com.brigbrednich.movewithoutpain.premium.monthly",
-            "price_usd": 19.99,
-            "period": "monthly",
+            **subscription_block(c),
             "unlocks": sorted(p["slug"] for p in PATHS if p["premium"]),
         },
     }
 
 @app.get("/today", response_model=TodayResponse)
-async def get_today(path: Optional[str] = None, db: Session = Depends(get_db)):
+async def get_today(
+    path: Optional[str] = None,
+    db: Session = Depends(get_db),
+    c: Caller = Depends(caller),
+):
     """Daily routine. Optional ?path=slug filters to one routine path (default: full)."""
     if path is not None and path not in PATH_SLUGS:
         raise HTTPException(status_code=404, detail=f"Unknown path '{path}'. Valid: {sorted(PATH_SLUGS)}")
+    if path:
+        requested = next((p for p in PATHS if p["slug"] == path), None)
+        if requested and not c.may_access(requested["premium"]):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "premium_required", "path": path},
+            )
     exercises = db.query(Exercise).order_by(Exercise.category, Exercise.order).all()
     if path and path != "full":
         exercises = [ex for ex in exercises if path in (ex.paths or "").split(",")]
@@ -272,3 +295,55 @@ function onYouTubeIframeAPIReady(){
     events:{onError:function(e){document.getElementById('err').textContent='Video error '+e.data;}}});
 }
 </script></body></html>""".replace("VIDEO_ID", video_id)
+
+
+# --------------------------------------------------------------------------- #
+# Billing (RevenueCat)
+# --------------------------------------------------------------------------- #
+
+@app.post("/billing/revenuecat/webhook")
+async def revenuecat_webhook(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+    x_revenuecat_webhook_signature: Optional[str] = Header(
+        default=None, alias="X-RevenueCat-Webhook-Signature"
+    ),
+    db: Session = Depends(get_db),
+):
+    """RevenueCat posts subscription lifecycle events here.
+
+    We ignore the event's entitlement fields and re-fetch authoritative state
+    from RevenueCat for every app_user_id the event mentions. Always answer 200
+    on success — anything else makes RevenueCat retry (5x, backing off).
+    """
+    body = await request.body()
+    verify_webhook(body, authorization, x_revenuecat_webhook_signature)
+    payload = await request.json()
+    return handle_webhook(db, payload)
+
+
+@app.get("/billing/status")
+async def billing_status(c: Caller = Depends(caller)):
+    """What the server believes about the calling device. Used by the app after a
+    purchase or restore, and by you for debugging a support ticket."""
+    return {
+        "app_user_id": c.app_user_id,
+        "api_version": c.api_version,
+        "gating_active": c.gated,
+        "premium": c.premium,
+    }
+
+
+@app.post("/billing/refresh")
+async def billing_refresh(c: Caller = Depends(caller), db: Session = Depends(get_db)):
+    """Force a RevenueCat re-check for the calling device. The app calls this
+    immediately after a successful purchase or restore so the server does not
+    wait on the webhook."""
+    if not c.app_user_id:
+        raise HTTPException(status_code=400, detail="Missing X-Device-Id header")
+    row = refresh_entitlement(db, c.app_user_id)
+    return {
+        "app_user_id": c.app_user_id,
+        "premium": bool(row.is_active) if row else False,
+        "expires_at": row.expires_at.isoformat() if row and row.expires_at else None,
+    }
