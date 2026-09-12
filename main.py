@@ -222,19 +222,58 @@ PRIVACY_HTML = """<!DOCTYPE html>
 <style>body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#2B2B2B;line-height:1.6}h1{color:#2A7D6D}h2{color:#1F5F53;margin-top:28px}</style></head>
 <body>
 <h1>Privacy Policy - Move Without Pain</h1>
-<p><i>Effective August 1, 2026</i></p>
-<p>Move Without Pain ("the app") is a bilingual mobility training app. We keep things simple: <b>the app has no user accounts and collects no personal information.</b></p>
+<p><i>Effective September 12, 2026</i></p>
+<p>Move Without Pain ("the app") is a bilingual mobility training app. We keep things simple: <b>the app has no user accounts, and we do not collect your name, email address, or any information that identifies you personally.</b></p>
 <h2>What stays on your device</h2>
 <p>Your practice history, streaks, language preference, and reminder settings are stored only on your device. They are never uploaded to our servers.</p>
 <h2>What is sent to our servers</h2>
 <p>The app fetches the daily exercise list and daily tip from our server. When you ask the AI coach a question, the text of your question is sent to our server and forwarded to an AI provider (DeepSeek) to generate a response. Questions are not linked to your identity, are not used for advertising, and are never sold.</p>
+<p>The app also creates a random identifier for your device the first time you open it. It is a random string, not derived from your name, email, phone number, or any Apple identifier, and it is what tells our server whether this device has an active subscription. It is stored on your device and sent with requests to our server. We cannot use it to identify you.</p>
+<h2>Subscriptions and payment</h2>
+<p>Move Without Pain Premium is an auto-renewing subscription, available as a monthly or an
+annual plan. The price is shown in your local currency on the subscription screen in the app
+before you are asked to confirm anything.</p>
+<p>Payment is charged to your Apple Account when you confirm the purchase. The subscription
+renews automatically for the same period and price unless it is cancelled at least 24 hours
+before the end of the current period. Your Apple Account is charged for the renewal within 24
+hours of the end of the current period.</p>
+<p>You can manage or cancel your subscription at any time in Settings on your device, under
+your Apple Account, then Subscriptions. Deleting the app does not cancel your subscription.</p>
+<p>Purchases are processed by Apple. We never see or store your payment card details. We use
+RevenueCat, a subscription management service, to verify with Apple whether a subscription is
+active. RevenueCat receives the random device identifier described above and the purchase
+receipt from Apple - not your name, email address, or payment details.</p>
+<p>Terms of use for the subscription are Apple's standard licence agreement, available at
+<a href='https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'>apple.com/legal/internet-services/itunes/dev/stdeula</a>.</p>
+
 <h2>Third-party content</h2>
 <p>Exercise demo videos are provided through YouTube, which may collect data according to Google's privacy policy when videos play.</p>
 <h2>Not medical advice</h2>
 <p>The app offers general mobility guidance and is not a substitute for professional medical advice. Consult a healthcare professional for injuries or medical conditions.</p>
 <h2>Contact</h2>
 <p>Questions? Email <a href='mailto:brigbrednich@gmail.com'>brigbrednich@gmail.com</a>.</p>
-<p><i>Politica de privacidad: la app no tiene cuentas de usuario y no recopila informacion personal. Tu historial de practica se guarda solo en tu dispositivo. Las preguntas al coach de IA se envian a nuestro servidor y a DeepSeek para generar la respuesta, sin vincularse a tu identidad ni venderse. Contacto: brigbrednich@gmail.com.</i></p>
+<hr>
+<h2>Politica de privacidad (resumen en espanol)</h2>
+<p>La app no tiene cuentas de usuario y no recopila tu nombre, correo electronico ni ningun dato
+que te identifique personalmente. Tu historial de practica se guarda solo en tu dispositivo. Las
+preguntas al coach de IA se envian a nuestro servidor y a DeepSeek para generar la respuesta, sin
+vincularse a tu identidad ni venderse.</p>
+<p>La app crea un identificador aleatorio para tu dispositivo la primera vez que la abres. Es una
+cadena aleatoria, no derivada de tu nombre, correo ni de ningun identificador de Apple, y sirve
+para saber si este dispositivo tiene una suscripcion activa.</p>
+<h2>Suscripciones y pago</h2>
+<p>Move Without Pain Premium es una suscripcion de renovacion automatica, disponible en plan
+mensual o anual. El precio se muestra en tu moneda local en la pantalla de suscripcion antes de
+confirmar la compra.</p>
+<p>El pago se carga a tu cuenta de Apple al confirmar la compra. La suscripcion se renueva
+automaticamente por el mismo periodo y precio salvo que se cancele al menos 24 horas antes del
+final del periodo actual. Puedes gestionarla o cancelarla cuando quieras en Ajustes, en tu cuenta
+de Apple, apartado Suscripciones. Borrar la app no cancela la suscripcion.</p>
+<p>Las compras las procesa Apple. Nunca vemos ni almacenamos los datos de tu tarjeta. Usamos
+RevenueCat para verificar con Apple si una suscripcion esta activa; RevenueCat recibe el
+identificador aleatorio del dispositivo y el recibo de compra de Apple, no tu nombre, correo ni
+datos de pago.</p>
+<p>Contacto: <a href='mailto:brigbrednich@gmail.com'>brigbrednich@gmail.com</a>.</p>
 </body></html>"""
 
 @app.get("/privacy", response_class=HTMLResponse)
