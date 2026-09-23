@@ -99,7 +99,7 @@ def auto_seed():
         if tier_filled:
             print(f"✅ Backfilled tier/in_v1_library on {tier_filled} exercises.")
 
-        if paths_filled or neuro_filled:
+        if paths_filled or neuro_filled or tier_filled:
             db.commit()
             print(f"✅ Backfilled paths on {paths_filled} and neuro fields on {neuro_filled} exercises.")
     except Exception as e:
