@@ -9,6 +9,15 @@ import os
 from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
 from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
+from content import (
+    TIER_FREE,
+    claim_legacy,
+    exercise_unlocked,
+    is_grandfathered,
+    playback_urls,
+    public_exercise,
+    MUX_CONFIGURED,
+)
 from entitlements import (
     Caller,
     caller,
@@ -47,6 +56,9 @@ def auto_seed():
         ("neuro_tag", "VARCHAR(40)"),
         ("neuro_why_en", "TEXT"),
         ("neuro_why_es", "TEXT"),
+        ("tier", "VARCHAR(10)"),
+        ("mux_playback_id", "VARCHAR(100)"),
+        ("in_v1_library", "BOOLEAN"),
     ]
     try:
         inspector = inspect(engine)
@@ -77,6 +89,16 @@ def auto_seed():
             ex.neuro_tag, ex.neuro_why_en, ex.neuro_why_es = tag, why_en, why_es
             neuro_filled += 1
 
+        # Everything that exists at this point is the original v1.0 library:
+        # free, on YouTube, and permanently available to grandfathered devices.
+        tier_filled = 0
+        for ex in db.query(Exercise).filter(Exercise.tier.is_(None)).all():
+            ex.tier = "free"
+            ex.in_v1_library = True
+            tier_filled += 1
+        if tier_filled:
+            print(f"✅ Backfilled tier/in_v1_library on {tier_filled} exercises.")
+
         if paths_filled or neuro_filled:
             db.commit()
             print(f"✅ Backfilled paths on {paths_filled} and neuro fields on {neuro_filled} exercises.")
@@ -106,7 +128,11 @@ class ExerciseResponse(BaseModel):
     tips_en: Optional[str]
     tips_es: Optional[str]
     youtube_video_id: Optional[str]
+    mux_playback_id: Optional[str] = None
     paths: Optional[str]  # comma-separated path slugs, e.g. "full,mobility,morning"
+    tier: str = "free"
+    # What THIS caller may open. v1.0 clients always see true.
+    unlocked: bool = True
     neuro_tag: Optional[str] = None
     neuro_why_en: Optional[str] = None
     neuro_why_es: Optional[str] = None
@@ -169,9 +195,23 @@ async def get_today(
         exercises = [ex for ex in exercises if path in (ex.paths or "").split(",")]
     tip_record = db.query(DailyTip).filter(DailyTip.tip_date == date.today()).first()
     tip = tip_record.content_en if tip_record else None
+
+    # Locked exercises are still returned - the app shows them with a lock badge,
+    # because people subscribe for what they can see - but their video ids are
+    # stripped so a locked row can never leak a playable URL.
+    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
+    payload = [
+        public_exercise(
+            ex,
+            exercise_unlocked(
+                ex, gated=c.gated, premium=c.premium, grandfathered=grandfathered
+            ),
+        )
+        for ex in exercises
+    ]
     return {
         "date": date.today().isoformat(),
-        "exercises": exercises,
+        "exercises": payload,
         "tip": tip,
     }
 
@@ -385,4 +425,93 @@ async def billing_refresh(c: Caller = Depends(caller), db: Session = Depends(get
         "app_user_id": c.app_user_id,
         "premium": bool(row.is_active) if row else False,
         "expires_at": row.expires_at.isoformat() if row and row.expires_at else None,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Content access
+# --------------------------------------------------------------------------- #
+
+class LegacyClaim(BaseModel):
+    """Evidence that this device was using the app before v1.1."""
+    earliest_practice: Optional[str] = None  # ISO date from on-device history
+
+
+@app.post("/billing/claim-legacy")
+async def claim_legacy_access(
+    claim: LegacyClaim,
+    c: Caller = Depends(caller),
+    db: Session = Depends(get_db),
+):
+    """Grandfather a pre-v1.1 device into the original 14 exercises, permanently.
+
+    Sandy's rule: existing users "keep access to the content that was available
+    to them when they joined." v1.0 never sent a device id, so the only evidence
+    available is the practice history already on the phone. Claimed once, then
+    fixed.
+    """
+    if not c.app_user_id:
+        raise HTTPException(status_code=400, detail="Missing X-Device-Id header")
+    result = claim_legacy(db, c.app_user_id, claim.earliest_practice)
+    return {"app_user_id": c.app_user_id, **result}
+
+
+@app.get("/video/{exercise_id}")
+async def get_video(
+    exercise_id: int,
+    c: Caller = Depends(caller),
+    db: Session = Depends(get_db),
+):
+    """A playable URL for one exercise, if this caller is entitled to it.
+
+    Premium content is on Mux and comes back as a signed HLS URL that expires in
+    minutes. The original 14 are on YouTube and come back as an id, because v1.0
+    is live in the field and reads them that way.
+    """
+    ex = db.get(Exercise, exercise_id)
+    if ex is None:
+        raise HTTPException(status_code=404, detail="Unknown exercise")
+
+    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
+    if not exercise_unlocked(
+        ex, gated=c.gated, premium=c.premium, grandfathered=grandfathered
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "premium_required", "exercise_id": exercise_id},
+        )
+
+    if ex.mux_playback_id:
+        urls = playback_urls(ex.mux_playback_id)
+        if urls is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Video signing is not configured on this server",
+            )
+        return {"exercise_id": exercise_id, "source": "mux", **urls}
+
+    if ex.youtube_video_id:
+        return {
+            "exercise_id": exercise_id,
+            "source": "youtube",
+            "youtube_video_id": ex.youtube_video_id,
+            "embed_url": f"/embed/{ex.youtube_video_id}",
+        }
+
+    raise HTTPException(status_code=404, detail="No video for this exercise")
+
+
+@app.get("/content/status")
+async def content_status(c: Caller = Depends(caller), db: Session = Depends(get_db)):
+    """What this caller can see, and how the server is configured. Debugging aid."""
+    total = db.query(Exercise).count()
+    free = db.query(Exercise).filter(Exercise.tier == TIER_FREE).count()
+    return {
+        "app_user_id": c.app_user_id,
+        "gating_active": c.gated,
+        "premium": c.premium,
+        "grandfathered": is_grandfathered(db, c.app_user_id) if c.gated else False,
+        "exercises_total": total,
+        "exercises_free": free,
+        "mux_configured": MUX_CONFIGURED,
     }
