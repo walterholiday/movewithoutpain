@@ -125,15 +125,50 @@ def claim_legacy(db: Session, app_user_id: str, earliest_practice_iso: Optional[
 # Who may see what
 # --------------------------------------------------------------------------- #
 
+def effective_tier(exercise) -> str:
+    """The tier to enforce. A missing tier is free only for the original v1.0
+    library; on anything else it is premium, so content fails closed."""
+    if exercise.tier:
+        return exercise.tier
+    return TIER_FREE if getattr(exercise, "in_v1_library", False) else TIER_PREMIUM
+
+
+def is_new_premium(exercise) -> bool:
+    """Premium content that did NOT ship in v1.0 — Sandy's new filmed videos."""
+    return effective_tier(exercise) == TIER_PREMIUM and not getattr(
+        exercise, "in_v1_library", False
+    )
+
+
+def visible_to(exercise, api_version: int) -> bool:
+    """Whether this exercise appears in lists for this client at all.
+
+    v1.0 builds (no X-MWP-Api header) only ever see the original library. They
+    cannot play Mux video or render a lock, so showing them new premium rows
+    would hand out Sandy's new instructions for free next to an empty player.
+    """
+    return bool(getattr(exercise, "in_v1_library", False)) or api_version >= 2
+
+
 def exercise_unlocked(exercise, *, gated: bool, premium: bool, grandfathered: bool) -> bool:
     """Whether this caller may actually open this exercise.
 
-    `gated` is False for v1.0 clients and whenever the subscription system is
-    switched off — both of which mean everything stays open, exactly as today.
+    New premium content needs a verified subscription, full stop. `gated` is
+    decided by a header the client chooses to send, so it cannot be what
+    protects paid video: a request that simply omits X-MWP-Api would otherwise
+    get a signed URL. The SUBSCRIPTIONS_ENABLED kill switch does not open it
+    either — it can switch gating off for the original library, not give away
+    what is being sold. (During a RevenueCat outage, entitlements.py's grace
+    period keeps recent subscribers `premium`.)
+
+    For everything else, `gated` False (v1.0 clients, or the kill switch off)
+    means open, exactly as before.
     """
+    if is_new_premium(exercise):
+        return bool(gated and premium)
     if not gated:
         return True
-    if (exercise.tier or TIER_FREE) == TIER_FREE:
+    if effective_tier(exercise) == TIER_FREE:
         return True
     if premium:
         return True
@@ -163,7 +198,7 @@ def public_exercise(exercise, unlocked: bool) -> dict:
         "neuro_tag": exercise.neuro_tag,
         "neuro_why_en": exercise.neuro_why_en,
         "neuro_why_es": exercise.neuro_why_es,
-        "tier": exercise.tier or TIER_FREE,
+        "tier": effective_tier(exercise),
         "unlocked": unlocked,
     }
     if not unlocked:

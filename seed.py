@@ -30,6 +30,9 @@ def seed():
             else:
                 data["youtube_video_id"] = None
             data["paths"] = ",".join(EXERCISE_PATHS.get(name_en, ["full"]))
+            # The original 14 ARE the v1.0 library: free, kept by grandfathered devices.
+            data["tier"] = "free"
+            data["in_v1_library"] = True
             db.add(Exercise(**data))
         db.commit()
         print("✅ Database seeded with all exercises and YouTube IDs.")

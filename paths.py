@@ -14,8 +14,8 @@ PATHS = [
         "order": 1,
         "name_en": "Full Routine",
         "name_es": "Rutina Completa",
-        "description_en": "The complete 14-exercise daily routine: mobility, strength, and stretches.",
-        "description_es": "La rutina diaria completa de 14 ejercicios: movilidad, fuerza y estiramientos.",
+        "description_en": "The complete daily routine: mobility, strength, and stretches.",
+        "description_es": "La rutina diaria completa: movilidad, fuerza y estiramientos.",
         "icon": "🧘",
     },
     {
@@ -67,6 +67,19 @@ PATHS = [
         "description_en": "Pelvic alignment and hip-flexor work to help you sit and stand taller.",
         "description_es": "Alineación pélvica y trabajo de flexores de cadera para una mejor postura.",
         "icon": "🧍",
+    },
+    {
+        # Sandy's wall series (filmed 2026-09-17). Premium, and hidden from v1.0
+        # builds (min_api) — they could not open it, it would just be an empty card.
+        "slug": "wall",
+        "premium": True,
+        "min_api": 2,
+        "order": 7,
+        "name_en": "Wall Routine",
+        "name_es": "Rutina en la Pared",
+        "description_en": "Supported stretches with your legs on the wall. Follow the timer in each video.",
+        "description_es": "Estiramientos apoyados con las piernas en la pared. Sigue el temporizador de cada vídeo.",
+        "icon": "🧱",
     },
 ]
 

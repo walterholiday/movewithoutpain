@@ -26,7 +26,10 @@ class Exercise(Base):
     # Comma-separated routine path slugs, e.g. "full,mobility,morning"
     paths = Column(String(120), nullable=True)
     # Content tiering (added 2026-09-23). "free" or "premium".
-    tier = Column(String(10), nullable=True, default="free")
+    # No default on purpose: a row inserted without an explicit tier is NULL, and
+    # NULL on anything outside the original 14 is treated (and backfilled) as
+    # premium. Content fails closed.
+    tier = Column(String(10), nullable=True)
     # Mux playback id for premium content. The original 14 stay on YouTube.
     mux_playback_id = Column(String(100), nullable=True)
     # True for the 14 exercises that shipped in v1.0. Grandfathered devices keep

@@ -11,6 +11,8 @@ from ai_client import deepseek, DEFAULT_MODEL
 from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
 from content import (
     TIER_FREE,
+    TIER_PREMIUM,
+    visible_to,
     claim_legacy,
     exercise_unlocked,
     is_grandfathered,
@@ -27,6 +29,7 @@ from entitlements import (
     refresh as refresh_entitlement,
 )
 from neuro import neuro_for
+from premium_exercises import PREMIUM_EXERCISES, V1_VIDEO_UPGRADES
 
 app = FastAPI()
 
@@ -89,15 +92,53 @@ def auto_seed():
             ex.neuro_tag, ex.neuro_why_en, ex.neuro_why_es = tag, why_en, why_es
             neuro_filled += 1
 
-        # Everything that exists at this point is the original v1.0 library:
-        # free, on YouTube, and permanently available to grandfathered devices.
+        # The v1.0 library is defined by name: the original 14 in EXERCISE_PATHS.
+        # Enforced on every boot so it cannot drift. A row outside the 14 with no
+        # tier fails CLOSED as premium — before, every NULL-tier row was blessed
+        # as free v1 content, and a fresh seed left the 14 marked not-v1.
         tier_filled = 0
-        for ex in db.query(Exercise).filter(Exercise.tier.is_(None)).all():
-            ex.tier = "free"
-            ex.in_v1_library = True
-            tier_filled += 1
+        for ex in db.query(Exercise).all():
+            in_v1 = ex.name_en in EXERCISE_PATHS
+            tier = ex.tier or (TIER_FREE if in_v1 else TIER_PREMIUM)
+            if bool(ex.in_v1_library) != in_v1 or ex.tier != tier:
+                ex.in_v1_library, ex.tier = in_v1, tier
+                tier_filled += 1
         if tier_filled:
             print(f"✅ Backfilled tier/in_v1_library on {tier_filled} exercises.")
+
+        # Premium content lives in premium_exercises.py so it is reviewed in git
+        # and reproducible, not hand-edited in the database. Upsert by name_en.
+        premium_upserted = 0
+        for item in PREMIUM_EXERCISES:
+            if not item.get("mux_playback_id"):
+                continue  # not uploaded yet — never show a premium card with no video
+            if item["name_en"] in EXERCISE_PATHS:
+                # Never let a premium entry overwrite one of the original 14.
+                print(f"❌ Skipped premium entry that reuses a v1 name: {item['name_en']}")
+                continue
+            row = db.query(Exercise).filter(Exercise.name_en == item["name_en"]).first()
+            if row is None:
+                row = Exercise()
+                db.add(row)
+            for key, value in item.items():
+                setattr(row, key, value)
+            row.tier, row.in_v1_library = TIER_PREMIUM, False
+            premium_upserted += 1
+        if premium_upserted:
+            tier_filled += premium_upserted  # forces the commit below
+            print(f"✅ Upserted {premium_upserted} premium exercises.")
+
+        # New footage for exercises that are already free. They stay free and keep
+        # their YouTube id, because v1.0 builds read youtube_video_id; v1.1 plays
+        # the Mux version when there is one.
+        for name_en, playback_id in V1_VIDEO_UPGRADES.items():
+            if not playback_id or name_en not in EXERCISE_PATHS:
+                continue
+            row = db.query(Exercise).filter(Exercise.name_en == name_en).first()
+            if row is not None and row.mux_playback_id != playback_id:
+                row.mux_playback_id = playback_id
+                tier_filled += 1
+                print(f"✅ New video for free exercise: {name_en}")
 
         if paths_filled or neuro_filled or tier_filled:
             db.commit()
@@ -150,7 +191,8 @@ class CoachRequest(BaseModel):
 @app.get("/paths")
 async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
     """List the 6 routine paths with bilingual metadata, premium flag, and exercise counts."""
-    exercises = db.query(Exercise).all()
+    exercises = [ex for ex in db.query(Exercise).all() if visible_to(ex, c.api_version)]
+    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
     counts = {slug: 0 for slug in PATH_SLUGS}
     for ex in exercises:
         for slug in (ex.paths or "full").split(","):
@@ -164,9 +206,11 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
                 # `unlocked` is what the client should render off. Legacy (v1.0)
                 # builds ignore it and stay fully unlocked; v1.1+ builds send
                 # X-MWP-Api: 2 and get honest values.
-                "unlocked": c.may_access(p["premium"]),
+                # Grandfathered devices keep every routine they had in v1.0.
+                "unlocked": c.may_access(p["premium"]) or grandfathered,
             }
             for p in sorted(PATHS, key=lambda p: p["order"])
+            if p.get("min_api", 1) <= c.api_version
         ],
         "subscription": {
             **subscription_block(c),
@@ -183,14 +227,19 @@ async def get_today(
     """Daily routine. Optional ?path=slug filters to one routine path (default: full)."""
     if path is not None and path not in PATH_SLUGS:
         raise HTTPException(status_code=404, detail=f"Unknown path '{path}'. Valid: {sorted(PATH_SLUGS)}")
+    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
     if path:
         requested = next((p for p in PATHS if p["slug"] == path), None)
-        if requested and not c.may_access(requested["premium"]):
+        if requested and not (c.may_access(requested["premium"]) or grandfathered):
             raise HTTPException(
                 status_code=403,
                 detail={"error": "premium_required", "path": path},
             )
-    exercises = db.query(Exercise).order_by(Exercise.category, Exercise.order).all()
+    exercises = [
+        ex
+        for ex in db.query(Exercise).order_by(Exercise.category, Exercise.order).all()
+        if visible_to(ex, c.api_version)
+    ]
     if path and path != "full":
         exercises = [ex for ex in exercises if path in (ex.paths or "").split(",")]
     tip_record = db.query(DailyTip).filter(DailyTip.tip_date == date.today()).first()
@@ -199,7 +248,6 @@ async def get_today(
     # Locked exercises are still returned - the app shows them with a lock badge,
     # because people subscribe for what they can see - but their video ids are
     # stripped so a locked row can never leak a playable URL.
-    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
     payload = [
         public_exercise(
             ex,
