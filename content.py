@@ -54,9 +54,10 @@ MUX_STREAM_BASE = "https://stream.mux.com"
 MUX_IMAGE_BASE = "https://image.mux.com"
 
 # A device may only claim grandfathered status if it can show practice history
-# older than this. v1.0 shipped in August 2026; anything claiming to predate this
-# is a device that really was using the app before the paywall existed.
-V1_CUTOFF = datetime(2026, 9, 1, tzinfo=timezone.utc)
+# older than this. The paywall arrives with v1.1 in October 2026, so a practice
+# date before this can only have been recorded by a v1.0 build: every pre-v1.1
+# device qualifies. Must match V1_CUTOFF in the app's src/utils/subscription.ts.
+V1_CUTOFF = datetime(2026, 10, 31, tzinfo=timezone.utc)
 
 
 # --------------------------------------------------------------------------- #

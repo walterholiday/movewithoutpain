@@ -306,19 +306,19 @@ from fastapi.responses import HTMLResponse
 
 PRIVACY_HTML = """<!DOCTYPE html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>Privacy Policy - Move Without Pain</title>
+<title>Privacy Policy - FelixFlex</title>
 <style>body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#2B2B2B;line-height:1.6}h1{color:#2A7D6D}h2{color:#1F5F53;margin-top:28px}</style></head>
 <body>
-<h1>Privacy Policy - Move Without Pain</h1>
-<p><i>Effective September 12, 2026</i></p>
-<p>Move Without Pain ("the app") is a bilingual mobility training app. We keep things simple: <b>the app has no user accounts, and we do not collect your name, email address, or any information that identifies you personally.</b></p>
+<h1>Privacy Policy - FelixFlex (formerly Move Without Pain)</h1>
+<p><i>Effective October 2, 2026</i></p>
+<p>FelixFlex, previously called Move Without Pain ("the app"), is a bilingual mobility training app. We keep things simple: <b>the app has no user accounts, and we do not collect your name, email address, or any information that identifies you personally.</b></p>
 <h2>What stays on your device</h2>
-<p>Your practice history, streaks, language preference, and reminder settings are stored only on your device. They are never uploaded to our servers.</p>
+<p>Your practice history, streaks, language preference, and reminder settings are stored on your device. With one exception, they are never uploaded to our servers: if you used the app before subscriptions were introduced, the app sends our server the date of your first recorded practice, once, together with the random device identifier described below. We use it only to keep the original routines free on your device.</p>
 <h2>What is sent to our servers</h2>
 <p>The app fetches the daily exercise list and daily tip from our server. When you ask the AI coach a question, the text of your question is sent to our server and forwarded to an AI provider (DeepSeek) to generate a response. Questions are not linked to your identity, are not used for advertising, and are never sold.</p>
 <p>The app also creates a random identifier for your device the first time you open it. It is a random string, not derived from your name, email, phone number, or any Apple identifier, and it is what tells our server whether this device has an active subscription. It is stored on your device and sent with requests to our server. We cannot use it to identify you.</p>
 <h2>Subscriptions and payment</h2>
-<p>Move Without Pain Premium is an auto-renewing subscription, available as a monthly or an
+<p>FelixFlex Premium is an auto-renewing subscription, available as a monthly, a six-month or an
 annual plan. The price is shown in your local currency on the subscription screen in the app
 before you are asked to confirm anything.</p>
 <p>Payment is charged to your Apple Account when you confirm the purchase. The subscription
@@ -335,7 +335,7 @@ receipt from Apple - not your name, email address, or payment details.</p>
 <a href='https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'>apple.com/legal/internet-services/itunes/dev/stdeula</a>.</p>
 
 <h2>Third-party content</h2>
-<p>Exercise demo videos are provided through YouTube, which may collect data according to Google's privacy policy when videos play.</p>
+<p>Exercise demo videos are provided through YouTube, which may collect data according to Google's privacy policy when videos play. Videos for newer exercises are streamed from Mux, a video hosting service. When one of them plays, Mux receives the technical information any video stream needs, such as your IP address and device type; it does not receive the random device identifier described above.</p>
 <h2>Not medical advice</h2>
 <p>The app offers general mobility guidance and is not a substitute for professional medical advice. Consult a healthcare professional for injuries or medical conditions.</p>
 <h2>Contact</h2>
@@ -343,15 +343,19 @@ receipt from Apple - not your name, email address, or payment details.</p>
 <hr>
 <h2>Politica de privacidad (resumen en espanol)</h2>
 <p>La app no tiene cuentas de usuario y no recopila tu nombre, correo electronico ni ningun dato
-que te identifique personalmente. Tu historial de practica se guarda solo en tu dispositivo. Las
-preguntas al coach de IA se envian a nuestro servidor y a DeepSeek para generar la respuesta, sin
+que te identifique personalmente. Tu historial de practica se guarda solo en tu dispositivo, con una
+excepcion: si ya usabas la app antes de que existieran las suscripciones, la app envia a nuestro
+servidor, una sola vez, la fecha de tu primera practica registrada, para mantener gratis las rutinas
+originales en tu dispositivo. Las preguntas al coach de IA se envian a nuestro servidor y a DeepSeek para generar la respuesta, sin
 vincularse a tu identidad ni venderse.</p>
+<p>Los videos de demostracion se reproducen desde YouTube y, en los ejercicios mas recientes, desde
+Mux. Al reproducirse, estos servicios reciben datos tecnicos como tu direccion IP.</p>
 <p>La app crea un identificador aleatorio para tu dispositivo la primera vez que la abres. Es una
 cadena aleatoria, no derivada de tu nombre, correo ni de ningun identificador de Apple, y sirve
 para saber si este dispositivo tiene una suscripcion activa.</p>
 <h2>Suscripciones y pago</h2>
-<p>Move Without Pain Premium es una suscripcion de renovacion automatica, disponible en plan
-mensual o anual. El precio se muestra en tu moneda local en la pantalla de suscripcion antes de
+<p>FelixFlex Premium es una suscripcion de renovacion automatica, disponible en plan
+mensual, semestral o anual. El precio se muestra en tu moneda local en la pantalla de suscripcion antes de
 confirmar la compra.</p>
 <p>El pago se carga a tu cuenta de Apple al confirmar la compra. La suscripcion se renueva
 automaticamente por el mismo periodo y precio salvo que se cancele al menos 24 horas antes del
