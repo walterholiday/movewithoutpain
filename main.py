@@ -107,7 +107,8 @@ def auto_seed():
             print(f"✅ Backfilled tier/in_v1_library on {tier_filled} exercises.")
 
         # Premium content lives in premium_exercises.py so it is reviewed in git
-        # and reproducible, not hand-edited in the database. Upsert by name_en.
+        # and reproducible, not hand-edited in the database. Upsert by Mux playback
+        # id first, then by name_en.
         premium_upserted = 0
         for item in PREMIUM_EXERCISES:
             if not item.get("mux_playback_id"):
@@ -116,7 +117,16 @@ def auto_seed():
                 # Never let a premium entry overwrite one of the original 14.
                 print(f"❌ Skipped premium entry that reuses a v1 name: {item['name_en']}")
                 continue
-            row = db.query(Exercise).filter(Exercise.name_en == item["name_en"]).first()
+            # Match the row by its video first, so renaming an exercise updates
+            # it in place instead of leaving the old name behind as a second row.
+            row = (
+                db.query(Exercise).filter(Exercise.mux_playback_id == item["mux_playback_id"]).first()
+                or db.query(Exercise).filter(Exercise.name_en == item["name_en"]).first()
+            )
+            if row is not None and row.name_en in EXERCISE_PATHS:
+                # The id belongs to one of the original 14 (a reshoot): leave it alone.
+                print(f"❌ Skipped premium entry whose video belongs to a v1 exercise: {item['name_en']}")
+                continue
             if row is None:
                 row = Exercise()
                 db.add(row)

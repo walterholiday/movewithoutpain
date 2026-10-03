@@ -31,8 +31,11 @@ import time
 
 API = "https://api.mux.com"
 
-# exercise name_en -> file, relative to the videos folder. The joined L+R clips
-# were made with `ffmpeg -f concat -c copy` into mux-ready/.
+# video key -> file, relative to the videos folder. The keys are what
+# mux_playback_ids.json is keyed by and what premium_exercises.py looks up as
+# `video` (or, for the two free reshoots, the exercise's name). They never change,
+# even if an exercise is later renamed. The joined L+R clips were made with
+# `ffmpeg -f concat -c copy` into mux-ready/.
 MANIFEST = {
     "Wall Figure Four": "pared1.mp4",
     "Legs Up the Wall Hamstring Stretch": "mux-ready/wall-2_legs-up-wall_L+R.mp4",
@@ -54,16 +57,18 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
-def curl(args: list, auth: bool = True) -> str:
+def curl(args: list, auth: bool = True, progress: bool = False) -> str:
     cfg = ""
     if auth:
         cfg = f'user = "{os.environ["MUX_TOKEN_ID"]}:{os.environ["MUX_TOKEN_SECRET"]}"\n'
+    # For the big PUT, curl draws its progress bar straight to the terminal
+    # (stderr is not captured): a silent multi-minute upload looks like a hang.
     res = subprocess.run(
-        ["curl", "-sS", "--fail-with-body", "-K", "-"] + args,
-        input=cfg, capture_output=True, text=True,
+        ["curl", "--progress-bar" if progress else "-sS", "--fail-with-body", "-K", "-"] + args,
+        input=cfg, stdout=subprocess.PIPE, stderr=None if progress else subprocess.PIPE, text=True,
     )
     if res.returncode != 0:
-        die(f"curl failed ({res.returncode}): {res.stderr.strip()} {res.stdout.strip()[:500]}")
+        die(f"curl failed ({res.returncode}): {(res.stderr or '').strip()} {res.stdout.strip()[:500]}")
     return res.stdout
 
 
@@ -113,12 +118,12 @@ def main() -> None:
         upload = api("POST", "/video/v1/uploads", {
             "cors_origin": "*",
             "new_asset_settings": {
-                "playback_policy": ["signed"],
+                "playback_policies": ["signed"],
                 "video_quality": "basic",
                 "passthrough": name,
             },
         })
-        curl(["-X", "PUT", "-T", path, "--progress-bar", "-o", "/dev/null", upload["url"]], auth=False)
+        curl(["-X", "PUT", "-T", path, "-o", "/dev/null", upload["url"]], auth=False, progress=True)
 
         asset_id = None
         for _ in range(120):
@@ -157,7 +162,7 @@ def main() -> None:
         print(f"  ✓ ready — signed playback id {signed[0]}  ({asset.get('duration', 0):.0f}s)")
 
     print(f"\nDone. {len(ids)} ids in {os.path.relpath(IDS_FILE)}.")
-    print("Next: git add mux_playback_ids.json && git commit -m 'Add Mux playback ids' && git push")
+    print("Next: commit mux_playback_ids.json and push. The push deploys to production.")
 
 
 if __name__ == "__main__":

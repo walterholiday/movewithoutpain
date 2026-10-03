@@ -154,7 +154,9 @@ def fetch_from_revenuecat(app_user_id: str) -> Optional[dict]:
                     "Accept": "application/json",
                 },
             )
-        if resp.status_code != 200:
+        # 201 is RevenueCat's answer the first time it sees an app user id: it
+        # creates the customer and returns it like any other.
+        if resp.status_code not in (200, 201):
             log.warning("RevenueCat %s for %s: %s", resp.status_code, app_user_id, resp.text[:300])
             return None
         subscriber = resp.json().get("subscriber", {}) or {}
