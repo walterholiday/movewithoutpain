@@ -30,6 +30,7 @@ from entitlements import (
 )
 from neuro import neuro_for
 from premium_exercises import PREMIUM_EXERCISES, V1_VIDEO_UPGRADES
+from youtube_ids import YOUTUBE_IDS
 
 app = FastAPI()
 
@@ -149,6 +150,19 @@ def auto_seed():
                 row.mux_playback_id = playback_id
                 tier_filled += 1
                 print(f"✅ New video for free exercise: {name_en}")
+
+        # YouTube ids for the original 14 live in youtube_ids.py. seed() only runs on
+        # an empty table, so without this a correction in that file never reached
+        # the database. Matched by name; rows outside the file are left alone.
+        youtube_fixed = 0
+        for name_en, video_id in YOUTUBE_IDS.items():
+            row = db.query(Exercise).filter(Exercise.name_en == name_en).first()
+            if row is not None and row.youtube_video_id != video_id:
+                row.youtube_video_id = video_id
+                youtube_fixed += 1
+        if youtube_fixed:
+            tier_filled += youtube_fixed  # forces the commit below
+            print(f"✅ Corrected YouTube id on {youtube_fixed} exercises.")
 
         if paths_filled or neuro_filled or tier_filled:
             db.commit()
