@@ -8,7 +8,10 @@ import os
 
 from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
-from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS, APP_INTRO_PLAYBACK_ID
+from paths import (
+    PATHS, PATH_SLUGS, EXERCISE_PATHS, APP_INTRO_PLAYBACK_ID, ROUTINES_API_VERSION,
+    visible_paths, paths_field_for,
+)
 from content import (
     TIER_FREE,
     TIER_PREMIUM,
@@ -231,7 +234,7 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
         for slug in (ex.paths or "full").split(","):
             if slug in counts:
                 counts[slug] += 1
-    return {
+    response = {
         "paths": [
             {
                 **p,
@@ -242,17 +245,23 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
                 # Grandfathered devices keep every routine they had in v1.0.
                 "unlocked": c.may_access(p["premium"]) or grandfathered,
             }
-            for p in sorted(PATHS, key=lambda p: p["order"])
-            if p.get("min_api", 1) <= c.api_version
+            # Felix's renamed/reordered list for 1.2.0+ (X-MWP-Api >= 3); the
+            # v1.1 list, byte for byte, for older builds.
+            for p in visible_paths(c.api_version)
         ],
         "subscription": {
             **subscription_block(c),
-            "unlocks": sorted(p["slug"] for p in PATHS if p["premium"]),
+            "unlocks": sorted(
+                p["slug"] for p in PATHS
+                if p["premium"] and p.get("min_api", 1) <= c.api_version
+            ),
         },
+    }
+    if c.api_version >= ROUTINES_API_VERSION:
         # Felix's general introduction (public Mux playback id), opened from the
         # home screen. None until tools/intro_upload.py has run.
-        "app_intro_playback_id": APP_INTRO_PLAYBACK_ID,
-    }
+        response["app_intro_playback_id"] = APP_INTRO_PLAYBACK_ID
+    return response
 
 @app.get("/today", response_model=TodayResponse)
 async def get_today(
@@ -293,6 +302,9 @@ async def get_today(
         )
         for ex in exercises
     ]
+    for item in payload:
+        # Pre-1.2.0 builds cannot list Strength, so they do not see its tag.
+        item["paths"] = paths_field_for(item.get("paths"), c.api_version)
     return {
         "date": date.today().isoformat(),
         "exercises": payload,
