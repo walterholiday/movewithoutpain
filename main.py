@@ -8,7 +8,7 @@ import os
 
 from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
-from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS
+from paths import PATHS, PATH_SLUGS, EXERCISE_PATHS, APP_INTRO_PLAYBACK_ID
 from content import (
     TIER_FREE,
     TIER_PREMIUM,
@@ -86,6 +86,15 @@ def auto_seed():
         for ex in db.query(Exercise).filter(Exercise.paths.is_(None)).all():
             ex.paths = ",".join(EXERCISE_PATHS.get(ex.name_en, ["full"]))
             paths_filled += 1
+
+        # The loop above only fills empty rows, so a tag added to EXERCISE_PATHS
+        # later (Strength, 2026-10-28) never reached rows that already had one.
+        # Re-sync the original 14 by name on every boot, like the YouTube ids.
+        for ex in db.query(Exercise).filter(Exercise.name_en.in_(list(EXERCISE_PATHS))).all():
+            want = ",".join(EXERCISE_PATHS[ex.name_en])
+            if ex.paths != want:
+                ex.paths = want
+                paths_filled += 1
 
         neuro_filled = 0
         for ex in db.query(Exercise).filter(Exercise.neuro_why_en.is_(None)).all():
@@ -240,6 +249,9 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
             **subscription_block(c),
             "unlocks": sorted(p["slug"] for p in PATHS if p["premium"]),
         },
+        # Felix's general introduction (public Mux playback id), opened from the
+        # home screen. None until tools/intro_upload.py has run.
+        "app_intro_playback_id": APP_INTRO_PLAYBACK_ID,
     }
 
 @app.get("/today", response_model=TodayResponse)
