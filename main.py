@@ -10,7 +10,7 @@ from models import SessionLocal, Exercise, DailyTip, engine
 from ai_client import deepseek, DEFAULT_MODEL
 from paths import (
     PATHS, PATH_SLUGS, EXERCISE_PATHS, APP_INTRO_PLAYBACK_ID, ROUTINES_API_VERSION,
-    visible_paths, paths_field_for,
+    visible_paths, paths_field_for, path_listed,
 )
 from content import (
     TIER_FREE,
@@ -253,7 +253,7 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
             **subscription_block(c),
             "unlocks": sorted(
                 p["slug"] for p in PATHS
-                if p["premium"] and p.get("min_api", 1) <= c.api_version
+                if p["premium"] and path_listed(p, c.api_version)
             ),
         },
     }

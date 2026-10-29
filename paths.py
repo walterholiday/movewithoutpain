@@ -32,6 +32,7 @@ ROUTINES_API_VERSION = 3
 PATHS = [
     {
         "slug": "full",
+        "max_api": ROUTINES_API_VERSION - 1,  # Felix 2026-10-29: only his five on the 1.2.0 home screen
         "legacy": {
             "order": 1,
         },
@@ -57,7 +58,7 @@ PATHS = [
         "name_en": "Mobility",
         "name_es": "Movilidad",
         "description_en": "Move your joints with more control.",
-        "description_es": "Mueve tus articulaciones con más control.",
+        "description_es": "Mueve tus articulaciones con control y sin dolor.",
         "icon": "🔄",
     },
     {
@@ -74,7 +75,7 @@ PATHS = [
         "name_en": "Stretch",
         "name_es": "Estiramiento",
         "description_en": "Explore your flexibility.",
-        "description_es": "Explora tu flexibilidad.",
+        "description_es": "Gana flexibilidad sin forzar.",
         "icon": "🤸",
     },
     {
@@ -91,7 +92,7 @@ PATHS = [
         "name_en": "Morning Routine",
         "name_es": "Rutina de la Mañana",
         "description_en": "Start your day with movement and meditation.",
-        "description_es": "Empieza tu día con movimiento y meditación.",
+        "description_es": "Despierta tu cuerpo con suavidad.",
         "icon": "🌅",
     },
     {
@@ -104,7 +105,7 @@ PATHS = [
         "name_en": "Strength",
         "name_es": "Fuerza",
         "description_en": "Build strength and control.",
-        "description_es": "Desarrolla fuerza y control.",
+        "description_es": "Construye fuerza desde el control.",
         "icon": "💪",
     },
     {
@@ -119,11 +120,12 @@ PATHS = [
         "name_en": "Night Routine",
         "name_es": "Rutina de Noche",
         "description_en": "Wind down with gentle movement.",
-        "description_es": "Relájate con movimiento suave.",
+        "description_es": "Suelta la tensión antes de dormir.",
         "icon": "🌙",
     },
     {
         "slug": "posture",
+        "max_api": ROUTINES_API_VERSION - 1,  # Felix 2026-10-29: only his five on the 1.2.0 home screen
         "legacy": {
             "order": 6,
         },
@@ -139,6 +141,7 @@ PATHS = [
         # Sandy's wall series (filmed 2026-09-17). Premium, and hidden from v1.0
         # builds (min_api) — they could not open it, it would just be an empty card.
         "slug": "wall",
+        "max_api": ROUTINES_API_VERSION - 1,  # Felix 2026-10-29: only his five on the 1.2.0 home screen
         "legacy": {
             "order": 7,
         },
@@ -162,7 +165,7 @@ PATH_SLUGS = {p["slug"] for p in PATHS}
 def path_view(p: dict, api_version: int) -> dict:
     """The path as this client should see it: Felix's 2026-10-28 version for
     X-MWP-Api >= 3, the v1.1 fields (and no intro id) for everything older."""
-    view = {k: v for k, v in p.items() if k not in ("legacy", "intro_playback_id", "min_api")}
+    view = {k: v for k, v in p.items() if k not in ("legacy", "intro_playback_id", "min_api", "max_api")}
     if api_version >= ROUTINES_API_VERSION:
         view["intro_playback_id"] = p.get("intro_playback_id")
     else:
@@ -170,16 +173,26 @@ def path_view(p: dict, api_version: int) -> dict:
     return view
 
 
+def path_listed(p: dict, api_version: int) -> bool:
+    """Whether this client may list the path at all. "min_api" hides a path from
+    older builds (Strength before 1.2.0); "max_api" hides it from newer ones
+    (Full Routine, Good Posture and Wall Routine from 1.2.0+, so Felix's five are
+    the whole home screen). A hidden path still exists: /today?path=<slug> keeps
+    working, and Full Routine stays the free one for pre-1.2.0 builds."""
+    return p.get("min_api", 1) <= api_version <= p.get("max_api", 10**9)
+
+
 def visible_paths(api_version: int) -> list:
     """Paths this client may list, in the order it should show them."""
-    views = [path_view(p, api_version) for p in PATHS if p.get("min_api", 1) <= api_version]
+    views = [path_view(p, api_version) for p in PATHS if path_listed(p, api_version)]
     return sorted(views, key=lambda v: v["order"])
 
 
 def paths_field_for(paths: str, api_version: int) -> str:
     """An exercise's comma-separated routine tags, minus routines this client
-    cannot list (Strength for pre-1.2.0 builds), so its /today stays unchanged."""
-    hidden = {p["slug"] for p in PATHS if p.get("min_api", 1) > api_version}
+    cannot list (Strength for pre-1.2.0 builds; Full, Good Posture and Wall for
+    1.2.0+), so each build's /today matches its own routine list."""
+    hidden = {p["slug"] for p in PATHS if not path_listed(p, api_version)}
     return ",".join(slug for slug in (paths or "").split(",") if slug and slug not in hidden)
 
 # Exercise (name_en) → list of path slugs. Every exercise is always in "full".
