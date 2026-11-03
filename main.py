@@ -32,6 +32,7 @@ from entitlements import (
     refresh as refresh_entitlement,
 )
 from neuro import neuro_for
+from programs import PROGRAMS_API_VERSION, PROGRAM_FOR_PATH, program_view
 from premium_exercises import PREMIUM_EXERCISES, V1_VIDEO_UPGRADES
 from youtube_ids import YOUTUBE_IDS
 
@@ -188,7 +189,7 @@ def auto_seed():
 async def root():
     return {
         "message": "Move Without Pain API is running 🧘",
-        "endpoints": ["/today", "/paths", "/history", "/stats", "/ai/coach"],
+        "endpoints": ["/today", "/paths", "/programs/morning", "/history", "/stats", "/ai/coach"],
         "docs": "/docs"
     }
 
@@ -244,6 +245,13 @@ async def get_paths(db: Session = Depends(get_db), c: Caller = Depends(caller)):
                 # X-MWP-Api: 2 and get honest values.
                 # Grandfathered devices keep every routine they had in v1.0.
                 "unlocked": c.may_access(p["premium"]) or grandfathered,
+                # 1.3.0+ (X-MWP-Api >= 4): the card opens this program, whose
+                # first week is free, even when the routine itself is locked.
+                **(
+                    {"program": PROGRAM_FOR_PATH.get(p["slug"])}
+                    if c.api_version >= PROGRAMS_API_VERSION and PROGRAM_FOR_PATH.get(p["slug"])
+                    else {}
+                ),
             }
             # Felix's renamed/reordered list for 1.2.0+ (X-MWP-Api >= 3); the
             # v1.1 list, byte for byte, for older builds.
@@ -554,6 +562,20 @@ async def claim_legacy_access(
         raise HTTPException(status_code=400, detail="Missing X-Device-Id header")
     result = claim_legacy(db, c.app_user_id, claim.earliest_practice)
     return {"app_user_id": c.app_user_id, **result}
+
+
+@app.get("/programs/{slug}")
+async def get_program(slug: str, c: Caller = Depends(caller)):
+    """A multi-week program (Morning Routine, Week 1 · Gentle first).
+
+    Free weeks come with public Mux HLS URLs; premium weeks need a verified
+    subscription and come back without URLs until then. The phone keeps the
+    day-by-day progress and the streak, as it does for every other session.
+    """
+    view = program_view(slug, premium_caller=c.premium)
+    if view is None:
+        raise HTTPException(status_code=404, detail="Unknown program")
+    return view
 
 
 @app.get("/video/{exercise_id}")
