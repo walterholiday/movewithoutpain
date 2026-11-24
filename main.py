@@ -33,6 +33,8 @@ from entitlements import (
 )
 from neuro import neuro_for
 from programs import PROGRAMS_API_VERSION, PROGRAM_FOR_PATH, program_view
+from guided import guided_view
+from coach_safety import COACH_SAFETY_RULES, mentions_pain, ensure_safety_note
 from premium_exercises import PREMIUM_EXERCISES, V1_VIDEO_UPGRADES
 from youtube_ids import YOUTUBE_IDS
 
@@ -189,7 +191,7 @@ def auto_seed():
 async def root():
     return {
         "message": "Move Without Pain API is running 🧘",
-        "endpoints": ["/today", "/paths", "/programs/morning", "/history", "/stats", "/ai/coach"],
+        "endpoints": ["/today", "/paths", "/guided", "/programs/morning", "/history", "/stats", "/ai/coach"],
         "docs": "/docs"
     }
 
@@ -336,6 +338,7 @@ async def ai_coach(request: CoachRequest, db: Session = Depends(get_db)):
         "1. Breath is key. 2. Maintain muscle awareness. 3. Control posture and alignment. "
         "4. Don't force, respect your body. 5. Consistency makes the difference. "
         "You give concise, safe, and encouraging advice. Never give medical diagnoses. "
+        f"{COACH_SAFETY_RULES} "
         f"Respond in {request.language}. Keep it under 200 words."
     )
     user_prompt = request.user_message
@@ -354,7 +357,13 @@ async def ai_coach(request: CoachRequest, db: Session = Depends(get_db)):
             ],
             temperature=0.7,
         )
-        return {"response": response.choices[0].message.content}
+        reply = response.choices[0].message.content or ""
+        # Sandy, 2026-11-23: questions about pain, injuries or persistent symptoms
+        # must always point to a qualified healthcare professional. The prompt asks
+        # for it; this guarantees it even when the model forgets.
+        if mentions_pain(request.user_message):
+            reply = ensure_safety_note(reply, request.language)
+        return {"response": reply}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
 
@@ -576,6 +585,23 @@ async def get_program(slug: str, c: Caller = Depends(caller)):
     if view is None:
         raise HTTPException(status_code=404, detail="Unknown program")
     return view
+
+
+@app.get("/guided")
+async def get_guided(c: Caller = Depends(caller), db: Session = Depends(get_db)):
+    """Guided routines per category (Mobility, Flexibility, Strength), the free
+    Week 1 and the weekly schedule behind "Your session today" (app 1.4.0+).
+
+    Each step carries the same exercise payload as /today, video ids stripped
+    when locked, so the app plays it with the usual GET /video/{id}.
+    """
+    grandfathered = is_grandfathered(db, c.app_user_id) if c.gated else False
+
+    def unlocked(ex) -> bool:
+        return exercise_unlocked(ex, gated=c.gated, premium=c.premium, grandfathered=grandfathered)
+
+    exercises = [ex for ex in db.query(Exercise).all() if visible_to(ex, c.api_version)]
+    return guided_view(exercises, lambda ex: public_exercise(ex, unlocked(ex)), unlocked)
 
 
 @app.get("/video/{exercise_id}")
