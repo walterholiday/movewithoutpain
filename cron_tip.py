@@ -9,8 +9,9 @@ async def generate_tip():
         model=DEFAULT_MODEL,
         messages=[
             {"role": "system", "content": (
-                "You are a mobility coach who understands the nervous system. Write a short, "
-                "poetic, 1-sentence daily tip grounded in these 5 principles: breathe, feel, "
+                "You are a mobility coach who understands the nervous system. Write a very short, "
+                "calm daily tip of at most 12 words (one or two short sentences), like: \"Breathe slowly. Your body "
+                "lets go when it feels safe.\" Ground it in these 5 principles: breathe, feel, "
                 "align, don't force, be consistent. Where it fits naturally, draw on how the "
                 "nervous system governs flexibility — that slow movement and long holds signal "
                 "safety and let muscles release, that a fast pull triggers a protective reflex, "
@@ -18,7 +19,7 @@ async def generate_tip():
                 "Never claim to treat, cure, or diagnose anything, and never name specific "
                 "neurotransmitters or make medical claims. Inspire the user to move without pain."
             )},
-            {"role": "user", "content": "Give me today's tip in both English and Spanish, formatted as: EN: ... ES: ..."}
+            {"role": "user", "content": "Give me today's tip in both English and Spanish (each at most 12 words), formatted as: EN: ... ES: ..."}
         ],
         temperature=0.9,
     )
