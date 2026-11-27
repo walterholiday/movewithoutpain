@@ -29,6 +29,11 @@ APP_INTRO_PLAYBACK_ID = INTRO_VIDEOS.get("app")
 # carries its pre-change fields under "legacy"; path_view() applies them.
 ROUTINES_API_VERSION = 3
 
+# Free tier (Sandy, 2026-11-27: free users need real value before we ask them to
+# pay). Every routine built only from the original 14 exercises is free:
+# Mobility, Strength and Morning. Premium is Sandy's new filmed content and the
+# routines that use it (Stretch, Night, Wall, Good Posture) plus later program
+# weeks. The original 14 exercises were already free one by one.
 PATHS = [
     {
         "slug": "full",
@@ -53,7 +58,7 @@ PATHS = [
             "description_en": "Wake up your hips with the six core mobility drills.",
             "description_es": "Despierta tus caderas con los seis ejercicios de movilidad.",
         },
-        "premium": True,
+        "premium": False,
         "order": 2,
         "name_en": "Mobility",
         "name_es": "Movilidad",
@@ -87,7 +92,7 @@ PATHS = [
             "description_en": "A gentle sequence to loosen up and start your day moving well.",
             "description_es": "Una secuencia suave para soltar el cuerpo y empezar bien el día.",
         },
-        "premium": True,
+        "premium": False,
         "order": 1,
         "name_en": "Morning Routine",
         "name_es": "Rutina de la Mañana",
@@ -99,7 +104,7 @@ PATHS = [
         # Felix's request (2026-10-28): Strength as one of the five headline routines.
         # Built from the three existing strength exercises; nothing new is programmed.
         "slug": "strength",
-        "premium": True,
+        "premium": False,
         "min_api": ROUTINES_API_VERSION,
         "order": 4,
         "name_en": "Strength",
